@@ -26,24 +26,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { taskApi, userApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/hooks/use-toast";
+import { Database } from "@/lib/database.types";
 
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().min(1, "Description is required"),
   assignee_id: z.string().min(1, "Assignee is required"),
-  reviewer_id: z.string().optional().nullable(),
+  reviewer_id: z.string().nullable().optional(),
 });
 
 export default function CreateTaskButton() {
   const [open, setOpen] = useState(false);
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<
+    Database["public"]["Tables"]["users"]["Row"][]
+  >([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const router = useRouter();
+  const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -56,22 +63,51 @@ export default function CreateTaskButton() {
   });
 
   const loadUsers = async () => {
-    const data = await userApi.getUsers();
-    setUsers(data);
+    try {
+      setIsLoadingUsers(true);
+      const data = await userApi.getUsers();
+      setUsers(data);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load users. Please try again.",
+      });
+      console.error("Failed to load users:", error);
+    } finally {
+      setIsLoadingUsers(false);
+    }
   };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
+      setIsLoading(true);
       await taskApi.createTask({
         ...values,
         reviewer_id: values.reviewer_id || null,
         status: "To Do",
       });
+
+      toast({
+        title: "Success",
+        description: "Task created successfully!",
+      });
+
       setOpen(false);
       form.reset();
       router.refresh();
     } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to create task. Please try again.",
+      });
       console.error("Failed to create task:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -96,7 +132,11 @@ export default function CreateTaskButton() {
                 <FormItem>
                   <FormLabel>Title</FormLabel>
                   <FormControl>
-                    <Input placeholder="Task title" {...field} />
+                    <Input
+                      placeholder="Task title"
+                      {...field}
+                      disabled={isLoading}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -113,6 +153,7 @@ export default function CreateTaskButton() {
                       placeholder="Task description"
                       className="resize-none"
                       {...field}
+                      disabled={isLoading}
                     />
                   </FormControl>
                   <FormMessage />
@@ -128,10 +169,17 @@ export default function CreateTaskButton() {
                   <Select
                     onValueChange={field.onChange}
                     defaultValue={field.value}
+                    disabled={isLoading || isLoadingUsers}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select assignee" />
+                        <SelectValue
+                          placeholder={
+                            isLoadingUsers
+                              ? "Loading users..."
+                              : "Select assignee"
+                          }
+                        />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -153,12 +201,19 @@ export default function CreateTaskButton() {
                 <FormItem>
                   <FormLabel>Reviewer (Optional)</FormLabel>
                   <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    onValueChange={(value) => field.onChange(value || null)}
+                    value={field.value || undefined}
+                    disabled={isLoading || isLoadingUsers}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select reviewer" />
+                        <SelectValue
+                          placeholder={
+                            isLoadingUsers
+                              ? "Loading users..."
+                              : "Select reviewer"
+                          }
+                        />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -173,8 +228,15 @@ export default function CreateTaskButton() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full">
-              Create Task
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Task"
+              )}
             </Button>
           </form>
         </Form>

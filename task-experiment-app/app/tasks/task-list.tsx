@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { TaskCard } from "./task-card";
+import { TaskCard } from "@/app/tasks/task-card";
 
 type Task = Database["public"]["Tables"]["tasks"]["Row"] & {
   assignee: { id: string; name: string };
