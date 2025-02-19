@@ -3,6 +3,8 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Database } from "@/lib/database.types";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type Task = Database["public"]["Tables"]["tasks"]["Row"] & {
   assignee: { id: string; name: string };
@@ -18,8 +20,22 @@ const statusColors = {
 } as const;
 
 export function TaskCard({ task }: { task: Task }) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
   return (
-    <Card className="p-4 hover:shadow-lg transition-shadow">
+    <Card
+      ref={setNodeRef}
+      style={style}
+      className="p-4 hover:shadow-lg transition-shadow cursor-move"
+      {...attributes}
+      {...listeners}
+    >
       <div className="space-y-2">
         <div className="flex justify-between items-start">
           <h3 className="font-semibold">{task.title}</h3>
