@@ -19,20 +19,29 @@ const statusColors = {
   Closed: "bg-green-500",
 } as const;
 
-export function TaskCard({ task }: { task: Task }) {
+export function TaskCard({
+  task,
+  isDragging,
+}: {
+  task: Task;
+  isDragging?: boolean;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: task.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    opacity: isDragging ? 0.5 : 1,
   };
 
   return (
     <Card
       ref={setNodeRef}
       style={style}
-      className="p-4 hover:shadow-lg transition-shadow cursor-move"
+      className={`p-4 hover:shadow-lg transition-shadow cursor-move ${
+        isDragging ? "shadow-lg" : ""
+      }`}
       {...attributes}
       {...listeners}
     >

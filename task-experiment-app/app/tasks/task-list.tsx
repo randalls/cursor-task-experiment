@@ -10,6 +10,8 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
+  useDroppable,
+  DragOverlay,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -41,13 +43,56 @@ const STATUSES = [
   "Closed",
 ] as const;
 
+function KanbanColumn({ status, tasks }: { status: string; tasks: Task[] }) {
+  const { setNodeRef } = useDroppable({
+    id: status,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="space-y-4 min-h-[500px] bg-muted/5 rounded-lg p-4"
+      id={status}
+    >
+      <div className="font-semibold text-sm p-3 bg-muted rounded-lg sticky top-0">
+        {status}
+        <span className="ml-2 text-muted-foreground">{tasks.length}</span>
+      </div>
+      <SortableContext
+        items={tasks.map((t) => t.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="space-y-2">
+          {tasks.map((task) => (
+            <TaskCard key={task.id} task={task} />
+          ))}
+        </div>
+      </SortableContext>
+    </div>
+  );
+}
+
 export default function TaskList() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [view, setView] = useState<"grid" | "kanban">("grid");
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
-  const sensors = useSensors(useSensor(MouseSensor), useSensor(TouchSensor));
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 200,
+        tolerance: 5,
+      },
+    })
+  );
 
   useEffect(() => {
     const loadTasks = async () => {
@@ -78,21 +123,38 @@ export default function TaskList() {
     {} as Record<(typeof STATUSES)[number], Task[]>
   );
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+    setIsDragging(true);
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveId(null);
+    setIsDragging(false);
+
     const { active, over } = event;
-    if (!over) return;
+    if (!over || active.id === over.id) return;
 
     const taskId = active.id as string;
     const newStatus = over.id as (typeof STATUSES)[number];
+    const task = tasks.find((t) => t.id === taskId);
 
+    if (!task || task.status === newStatus) return;
+
+    // Optimistically update UI
+    setTasks(
+      tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
+    );
+
+    // Debounce the API call
     try {
+      await new Promise((resolve) => setTimeout(resolve, 100)); // Small delay
       await taskApi.updateTask(taskId, { status: newStatus });
-      setTasks(
-        tasks.map((task) =>
-          task.id === taskId ? { ...task, status: newStatus } : task
-        )
-      );
     } catch (error) {
+      // Revert on failure
+      setTasks(
+        tasks.map((t) => (t.id === taskId ? { ...t, status: task.status } : t))
+      );
       console.error("Failed to update task status:", error);
     }
   };
@@ -139,29 +201,30 @@ export default function TaskList() {
           ))}
         </div>
       ) : (
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-5 gap-4">
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="grid grid-cols-5 gap-4 h-[calc(100vh-200px)] overflow-x-auto">
             {STATUSES.map((status) => (
-              <div key={status} className="space-y-4" id={status}>
-                <div className="font-semibold text-sm p-3 bg-muted rounded-lg">
-                  {status}
-                  <span className="ml-2 text-muted-foreground">
-                    {kanbanTasks[status].length}
-                  </span>
-                </div>
-                <SortableContext
-                  items={kanbanTasks[status].map((t) => t.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <div className="space-y-2">
-                    {kanbanTasks[status].map((task) => (
-                      <TaskCard key={task.id} task={task} />
-                    ))}
-                  </div>
-                </SortableContext>
-              </div>
+              <KanbanColumn
+                key={status}
+                status={status}
+                tasks={kanbanTasks[status]}
+              />
             ))}
           </div>
+          <DragOverlay>
+            {activeId ? (
+              <div className="opacity-80">
+                <TaskCard
+                  task={tasks.find((t) => t.id === activeId)!}
+                  isDragging={true}
+                />
+              </div>
+            ) : null}
+          </DragOverlay>
         </DndContext>
       )}
     </div>
