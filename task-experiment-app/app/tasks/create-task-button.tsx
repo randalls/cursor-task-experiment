@@ -37,7 +37,7 @@ const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().min(1, "Description is required"),
   assignee_id: z.string().min(1, "Assignee is required"),
-  reviewer_id: z.string().optional(),
+  reviewer_id: z.string().optional().nullable(),
 });
 
 export default function CreateTaskButton() {
@@ -64,6 +64,7 @@ export default function CreateTaskButton() {
     try {
       await taskApi.createTask({
         ...values,
+        reviewer_id: values.reviewer_id || null,
         status: "To Do",
       });
       setOpen(false);
